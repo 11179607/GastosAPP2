@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>💰 Control de Gastos</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: url('fondo-copilot.png') no-repeat center center fixed;
+      background-size: cover;
+      color: #333;
+      padding: 40px 20px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #004080;
+      margin-bottom: 25px;
+    }
+
+    .formulario {
+      max-width: 700px;
+      margin: auto;
+      padding: 30px;
+      border-radius: 12px;
+      backdrop-filter: blur(10px);
+      background-color: rgba(255, 255, 255, 0.2);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    input, button {
+      width: 100%;
+      padding: 12px;
+      margin: 10px 0;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+
+    input:focus {
+      border-color: #0077cc;
+      outline: none;
+    }
+
+    button {
+      background-color: transparent;
+      color: #004080;
+      font-weight: bold;
+      border: 2px solid #004080;
+      transition: all 0.3s ease;
+    }
+
+    button:hover {
+      background-color: rgba(255, 255, 255, 0.3);
+      border-color: #0066cc;
+      color: #000;
+    }
+
+    .gasto-lista {
+      margin-top: 20px;
+      background-color: rgba(255, 255, 255, 0.3);
+      padding: 15px;
+      border-radius: 8px;
+    }
+
+    .gasto-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 6px 0;
+      padding: 6px;
+      border-bottom: 1px solid #ddd;
+      animation: fadeIn 0.4s ease-in;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .gasto-item button {
+      background-color: transparent;
+      color: #a80000;
+      border: 2px solid #a80000;
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: 0.3s ease;
+    }
+
+    .gasto-item button:hover {
+      background-color: rgba(255, 0, 0, 0.1);
+    }
+
+    .saldo {
+      margin-top: 15px;
+      font-size: 17px;
+      color: #006400;
+      font-weight: 500;
+    }
+
+    canvas {
+      display: block;
+      margin: 30px auto 0;
+      width: 50%;
+      max-width: 350px;
+      height: auto;
+      background-color: #ffffffcc;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="formulario">
+    <h1>💼 Control de Gastos Personales</h1>
+    <input type="number" step="0.01" id="ingreso" placeholder="💰 Ingreso mensual">
+    <input type="text" id="descripcion" placeholder="Descripción del gasto">
+    <input type="number" step="0.01" id="monto" placeholder="Monto del gasto">
+    <button onclick="agregarGasto()">Agregar Gasto</button>
+
+    <div id="lista" class="gasto-lista"></div>
+    <div class="saldo" id="saldoDisponible"></div>
+    <canvas id="graficaGastos"></canvas>
+  </div>
+
+  <script>
+    const gastos = [];
+    const etiquetas = [];
+    let grafica;
+    let ingresoMensual = 0;
+
+    function agregarGasto() {
+      const ingresoInput = parseFloat(document.getElementById('ingreso').value);
+      const desc = document.getElementById('descripcion').value.trim();
+      const monto = parseFloat(document.getElementById('monto').value);
+
+      if (isNaN(ingresoInput) || ingresoInput <= 0) return alert("Ingresa un ingreso mensual válido.");
+      if (!desc || isNaN(monto) || monto <= 0) return alert("Ingresa un gasto válido.");
+
+      ingresoMensual = ingresoInput;
+      gastos.push(monto);
+      etiquetas.push(desc);
+
+      renderLista();
+      actualizarGrafica();
+      actualizarSaldo();
+
+      document.getElementById('descripcion').value = '';
+      document.getElementById('monto').value = '';
+    }
+
+    function renderLista() {
+      const lista = document.getElementById('lista');
+      lista.innerHTML = '';
+
+      gastos.forEach((monto, index) => {
+        const item = document.createElement('div');
+        item.className = 'gasto-item';
+
+        const formatted = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(monto);
+        item.innerHTML = `
+          <span>🧾 ${etiquetas[index]}: ${formatted}</span>
+          <button onclick="confirmarEliminacion(${index})">🗑 Eliminar</button>
+        `;
+        lista.appendChild(item);
+      });
+    }
+
+    function confirmarEliminacion(index) {
+      const confirmado = confirm(`¿Estás seguro de eliminar el gasto "${etiquetas[index]}"?`);
+      if (confirmado) {
+        eliminarGasto(index);
+      }
+    }
+
+    function eliminarGasto(index) {
+      gastos.splice(index, 1);
+      etiquetas.splice(index, 1);
+      renderLista();
+      actualizarGrafica();
+      actualizarSaldo();
+    }
+
+    function actualizarGrafica() {
+      const ctx = document.getElementById('graficaGastos').getContext('2d');
+      if (grafica) grafica.destroy();
+
+      grafica = new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: etiquetas,
+          datasets: [{
+            label: 'Gastos',
+            data: gastos,
+            backgroundColor: [
+              '#4285F4', '#FBBC05', '#34A853',
+              '#EA4335', '#FF6D01', '#9C27B0',
+              '#00ACC1', '#F4B400'
+            ],
+            borderColor: '#ffffff',
+            borderWidth: 2
+          }]
+        },
+        options: {
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: '#333' }
+            }
+          }
+        }
+      });
+    }
+
+    function actualizarSaldo() {
+      const totalGastos = gastos.reduce((a, b) => a + b, 0);
+      const saldo = ingresoMensual - totalGastos;
+      const formattedSaldo = new Intl.NumberFormat('es-CO', {
+        style: 'currency',
+        currency: 'COP'
+      }).format(saldo);
+      document.getElementById('saldoDisponible').textContent = `Saldo disponible: ${formattedSaldo}`;
+    }
+  </script>
+</body>
+</html>
